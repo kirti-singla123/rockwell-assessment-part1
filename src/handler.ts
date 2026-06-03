@@ -4,6 +4,13 @@ import { validateOrder } from "./services/validator";
 import { getOrder, createOrderRecord, updateOrderPhase } from "./services/dynamo";
 import { getSkuMappings, createSalesOrder } from "./services/erp-client";
 
+/** bug 1:: ensure ERP phase update completes before handler returns
+
+Bug: updateOrderPhase was not awaited after ERP order creation.
+Impact: handler returned before DynamoDB update completed, causing inconsistent order status and test failure.
+Fix: added await so DB update completes before function exits."
+On branch master */
+
 /**
  * Lambda handler that processes Shopify orders from an SQS queue.
  *
@@ -106,7 +113,7 @@ async function processRecord(record: SQSRecord): Promise<void> {
     const erpSalesOrderId = await createSalesOrder(erpOrder);
     console.log(`Created ERP sales order: ${erpSalesOrderId} for order ${order.orderId}`);
 
-    updateOrderPhase(order.orderId, "A1");
+    await updateOrderPhase(order.orderId, "A1"); 
   } catch (err) {
     console.error(`Failed to create ERP sales order for ${order.orderId}:`, err);
     await updateOrderPhase(order.orderId, "A0", `ERP creation failed: ${(err as Error).message}`);
