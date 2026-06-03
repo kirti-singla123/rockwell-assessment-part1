@@ -66,18 +66,41 @@ async function processRecord(record: SQSRecord): Promise<void> {
     });
   }
 
+  /**
+ * BUG 2: ERP mapping fetch errors were being masked
+ *
+ * Problem:
+ * When getSkuMappings() failed or returned invalid data,
+ * the error was caught but not properly handled in the handler.
+ * This led to skuMappings being undefined or incomplete,
+ * causing runtime crashes like "Cannot read properties of undefined (reading 'find')".
+ *
+ * Impact:
+ * - ERP mapping failures were not visible clearly
+ * - Handler continued execution with invalid data
+ * - Caused unpredictable runtime errors during order processing
+ *
+ * Fix:
+ * - Added proper error handling around getSkuMappings() in handler.ts
+ * - Logged ERP mapping fetch failures clearly
+ * - Re-threw the error to stop processing immediately instead of continuing with bad state
+ */
+
   // Step 4: Look up SKU mappings
-  let skuMappings: SkuMapping[];
-  try {
-    skuMappings = await getSkuMappings();
-  } catch (err) {
-  }
+  let skuMappings: SkuMapping[] = [];
+
+try {
+  skuMappings = await getSkuMappings();
+} catch (err) {
+  console.error("ERP mapping fetch failed:", err);
+  throw new Error(`ERP mapping fetch failed: ${(err as Error).message}`);
+}
 
   // Step 5: Build and create sales order in ERP
   const erpLineItems: ErpLineItem[] = [];
 
   for (const lineItem of order.lineItems) {
-    const mapping = skuMappings!.find((m) => m.shopifySku === lineItem.sku);
+    const mapping = skuMappings.find((m) => m.shopifySku === lineItem.sku);
     if (!mapping) {
       console.warn(`No ERP mapping found for SKU: ${lineItem.sku}`);
       continue;
