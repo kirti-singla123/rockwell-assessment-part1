@@ -69,3 +69,35 @@ tests/
 ├── handler.test.ts     ← Test suite
 └── fixtures/           ← Sample order payloads
 ```
+
+
+Rockwell Assessment – Part 1 Bug Summary
+Bug 1 – ERP Phase Update Not Awaited
+Problem:
+The updateOrderPhase() call after ERP order creation was not awaited.
+
+Production Impact:
+The Lambda function could return before the DynamoDB status update completed, causing inconsistent order states and intermittent processing failures.
+
+Fix:
+Added await before updateOrderPhase() so the handler waits for the database update to finish before exiting.
+
+Bug 2 – ERP Mapping Fetch Errors Were Masked
+Problem:
+Failures from getSkuMappings() were not being handled properly, which allowed execution to continue with invalid mapping data.
+
+Production Impact:
+This caused runtime errors such as Cannot read properties of undefined (reading 'find') and hid the original ERP failure, making debugging difficult.
+
+Fix:
+Added proper error handling around getSkuMappings(), logged the ERP error clearly, and re-threw it so processing stops immediately when mapping retrieval fails.
+
+Bug 3 – SKU Mapping Pagination Stopped Incorrectly
+Problem:
+The pagination logic assumed there were no more records when a page contained exactly 50 mappings.
+
+Production Impact:
+Orders containing products whose mappings existed on later pages could not be processed correctly because those mappings were never loaded.
+
+Fix:
+Updated the pagination logic to continue fetching additional pages until a page contains fewer than 50 records, ensuring all mappings are retrieved.
